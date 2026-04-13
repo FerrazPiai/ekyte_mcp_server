@@ -20,25 +20,28 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
+import type { Request, Response } from "express";
 
 import { registerReadTools } from "./tools/read-tools.js";
 import { registerWriteTools } from "./tools/write-tools.js";
 
-// ============ Server Setup ============
+// ============ Helper: create a fully configured MCP server ============
 
-const server = new McpServer({
-  name: "ekyte-mcp-server",
-  version: "1.0.0",
-});
-
-// Register all tools
-registerReadTools(server);
-registerWriteTools(server);
+function createServer(): McpServer {
+  const s = new McpServer({
+    name: "ekyte-mcp-server",
+    version: "1.0.0",
+  });
+  registerReadTools(s);
+  registerWriteTools(s);
+  return s;
+}
 
 // ============ Transport: stdio ============
 
 async function runStdio(): Promise<void> {
   validateEnv();
+  const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Ekyte MCP Server running via stdio");
@@ -52,22 +55,65 @@ async function runHTTP(): Promise<void> {
   const app = express();
   app.use(express.json());
 
+  // CORS — allows Claude Desktop / browser clients to connect
+  app.use((_req: Request, res: Response, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id");
+    res.header("Access-Control-Expose-Headers", "Mcp-Session-Id");
+    next();
+  });
+
+  app.options("/mcp", (_req: Request, res: Response) => {
+    res.status(204).end();
+  });
+
   // Health check endpoint
-  app.get("/health", (_req, res) => {
+  app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", server: "ekyte-mcp-server", version: "1.0.0" });
   });
 
-  // MCP endpoint
-  app.post("/mcp", async (req, res) => {
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-      enableJsonResponse: true,
+  // MCP endpoint — stateless mode: new server + transport per request
+  app.post("/mcp", async (req: Request, res: Response) => {
+    try {
+      const server = createServer();
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+      });
+
+      res.on("close", () => transport.close());
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("Error handling MCP request:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: { code: -32603, message: "Internal server error" },
+          id: null,
+        });
+      }
+    }
+  });
+
+  // GET and DELETE handlers — required by MCP protocol
+  // In stateless mode we don't support SSE streaming or session termination
+  app.get("/mcp", (_req: Request, res: Response) => {
+    res.status(405).json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "SSE not supported in stateless mode. Use POST." },
+      id: null,
     });
+  });
 
-    res.on("close", () => transport.close());
-
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+  app.delete("/mcp", (_req: Request, res: Response) => {
+    res.status(405).json({
+      jsonrpc: "2.0",
+      error: { code: -32000, message: "Session termination not supported in stateless mode." },
+      id: null,
+    });
   });
 
   const port = parseInt(process.env.PORT || "3000", 10);
