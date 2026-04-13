@@ -131,7 +131,7 @@ O esforço (duração) é calculado automaticamente.`,
         };
 
         await apiPost(
-          `companies/${companyId}/workspaces/${params.workspace_id}/time-trackings`,
+          `/api/companies/${companyId}/workspaces/${params.workspace_id}/time-trackings`,
           payload
         );
 
@@ -204,7 +204,7 @@ IMPORTANTE: Sempre confirme os dados com o usuário antes de executar.`,
         };
 
         await apiPost(
-          `companies/${companyId}/workspaces/${params.workspace_id}/time-trackings`,
+          `/api/companies/${companyId}/workspaces/${params.workspace_id}/time-trackings`,
           payload
         );
 
@@ -272,7 +272,7 @@ Use esta ferramenta para consultar apontamentos existentes antes de criar ou del
         if (params.user_id) queryParams.executorId = params.user_id;
 
         const data = await apiGet<unknown>(
-          `companies/${companyId}/time-trackings/data/details`,
+          `/api/companies/${companyId}/time-trackings/data/details`,
           queryParams
         );
 
@@ -368,7 +368,7 @@ Use ekyte_list_time_entries para verificar o apontamento correto antes de deleta
         ];
 
         await apiPatch(
-          `companies/${companyId}/workspaces/${params.workspace_id}/time-trackings/${params.time_entry_id}`,
+          `/api/companies/${companyId}/workspaces/${params.workspace_id}/time-trackings/${params.time_entry_id}`,
           patchPayload
         );
 
@@ -474,7 +474,7 @@ Erros aqui impactam diretamente o controle de performance da empresa.`,
         };
 
         const result = await apiPost<Record<string, unknown>>(
-          `companies/${companyId}/ctc-tasks`,
+          `/api/companies/${companyId}/ctc-tasks`,
           payload
         );
 
@@ -559,7 +559,7 @@ IMPORTANTE: Sempre confirme as alterações com o usuário antes de executar.`,
         }
 
         await apiPatch(
-          `v2/companies/${companyId}/ctc-tasks/${params.task_id}`,
+          `/api/v2/companies/${companyId}/ctc-tasks/${params.task_id}`,
           patchOps,
           { type: "list", updateAllTickets: "undefined" }
         );
@@ -611,7 +611,7 @@ Para verificar o status atual da tarefa, use ekyte_get_task primeiro.`,
         ];
 
         await apiPatch(
-          `v2/companies/${companyId}/ctc-tasks/${params.task_id}`,
+          `/api/v2/companies/${companyId}/ctc-tasks/${params.task_id}`,
           patchPayload,
           { type: "list", updateAllTickets: "undefined" }
         );
@@ -661,7 +661,7 @@ O comentário será adicionado como uma nova mensagem na timeline da tarefa, vis
         };
 
         await apiPost(
-          `v2/companies/${companyId}/ctc-tasks/${params.task_id}/comments`,
+          `/api/v2/companies/${companyId}/ctc-tasks/${params.task_id}/comments`,
           payload
         );
 

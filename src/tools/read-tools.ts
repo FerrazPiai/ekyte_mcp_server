@@ -402,18 +402,15 @@ NOTA: Esta ferramenta busca a tarefa pelo ID na API pública. Se a tarefa não f
     },
     async (params: GetTaskInput) => {
       try {
-        // Use list endpoint with no status filter to find task by ID across all statuses
+        // Fetch the specific task by ID using the public API endpoint
         const queryParams: Record<string, unknown> = {
-          page: 1,
-          status: 0, // All statuses
+          status: 0, // All statuses — ensures task is found regardless of current status
         };
         if (params.include_checklist) queryParams.includeChecklist = 1;
         if (params.include_phases) queryParams.includePhases = 1;
         if (params.include_comments) queryParams.includeComments = 1;
 
-        const data = await apiGet<EkyteTask[]>("/v1.2/tasks", queryParams);
-        const tasks = Array.isArray(data) ? data : [];
-        const task = tasks.find((t) => t.id === params.task_id);
+        const task = await apiGet<EkyteTask>(`/v1.2/tasks/${params.task_id}`, queryParams);
 
         if (!task) {
           return {
