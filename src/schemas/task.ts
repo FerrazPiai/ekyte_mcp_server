@@ -115,14 +115,27 @@ export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
 
 // ============ List Workspaces ============
 
-export const ListWorkspacesSchema = PaginationSchema.strict();
+export const ListWorkspacesSchema = z.object({
+  search: z.string().trim().min(1).optional()
+    .describe("Filtro de texto (case-insensitive) no nome do workspace. Ex: 'ferraz' acha 'V4 Ferraz Piai'."),
+  active_only: z.boolean().default(false)
+    .describe("Se true, retorna só workspaces ativos (active=1)."),
+  page: z.number().int().min(1).default(1)
+    .describe("Página do resultado filtrado (paginação client-side, 50 por página)."),
+  response_format: z.nativeEnum(ResponseFormat)
+    .default(ResponseFormat.MARKDOWN)
+    .describe("Formato de saída"),
+}).strict();
+
 export type ListWorkspacesInput = z.infer<typeof ListWorkspacesSchema>;
 
 // ============ List Users ============
 
 export const ListUsersSchema = z.object({
+  search: z.string().trim().min(1).optional()
+    .describe("Filtro de texto (case-insensitive) por nome ou email."),
   page: z.number().int().min(1).default(1)
-    .describe("Número da página (inicia em 1). Cada página retorna até 500 registros."),
+    .describe("Página do resultado filtrado (paginação client-side, 50 por página)."),
   response_format: z.nativeEnum(ResponseFormat)
     .default(ResponseFormat.MARKDOWN)
     .describe("Formato de saída"),
@@ -192,7 +205,18 @@ export type AddTaskCommentInput = z.infer<typeof AddTaskCommentSchema>;
 
 // ============ List Task Types ============
 
-export const ListTaskTypesSchema = PaginationSchema.strict();
+export const ListTaskTypesSchema = z.object({
+  search: z.string().trim().min(1).optional()
+    .describe("Filtro de texto (case-insensitive) no nome do tipo de tarefa. Ex: 'onboarding'."),
+  active_only: z.boolean().default(false)
+    .describe("Se true, retorna só tipos ativos (active=1)."),
+  page: z.number().int().min(1).default(1)
+    .describe("Página do resultado filtrado (paginação client-side, 50 por página)."),
+  response_format: z.nativeEnum(ResponseFormat)
+    .default(ResponseFormat.MARKDOWN)
+    .describe("Formato de saída"),
+}).strict();
+
 export type ListTaskTypesInput = z.infer<typeof ListTaskTypesSchema>;
 
 // ============ List Workflow Phases ============

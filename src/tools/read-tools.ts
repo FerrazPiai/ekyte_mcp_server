@@ -25,7 +25,9 @@ import {
 } from "../schemas/task.js";
 import type { EkyteWorkspace, EkyteUser, EkyteTaskType, EkyteTask } from "../types.js";
 
-// ============ Helper: Format response ============
+// ============ Helpers ============
+
+const PAGE_SIZE = 50;
 
 function formatResponse(data: unknown, markdown: string, format: ResponseFormat) {
   const textContent = format === ResponseFormat.MARKDOWN
@@ -33,9 +35,30 @@ function formatResponse(data: unknown, markdown: string, format: ResponseFormat)
     : JSON.stringify(data, null, 2);
   if (textContent.length > CHARACTER_LIMIT) {
     return textContent.substring(0, CHARACTER_LIMIT) +
-      "\n\n⚠️ Resposta truncada. Use filtros ou paginação para reduzir o volume de dados.";
+      "\n\n⚠️ Resposta truncada. Use o parâmetro `search` para filtrar por nome, ou avance a `page`.";
   }
   return textContent;
+}
+
+function paginate<T>(items: T[], page: number) {
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * PAGE_SIZE;
+  const slice = items.slice(start, start + PAGE_SIZE);
+  return {
+    slice,
+    total,
+    page: safePage,
+    totalPages,
+    hasMore: safePage < totalPages,
+    nextPage: safePage < totalPages ? safePage + 1 : null,
+  };
+}
+
+function matchSearch(haystack: string | undefined | null, needle: string): boolean {
+  if (!haystack) return false;
+  return haystack.toLowerCase().includes(needle.toLowerCase());
 }
 
 // ============ Register Read Tools ============
@@ -63,39 +86,49 @@ Paginação: 100 registros por página.`,
     },
     async (params: ListWorkspacesInput) => {
       try {
-        const data = await apiGet<EkyteWorkspace[]>(companyUrl("workspaces"), {
-          page: params.page,
-        });
+        const data = await apiGet<EkyteWorkspace[]>(companyUrl("workspaces"));
+        const all = Array.isArray(data) ? data : [];
 
-        const workspaces = Array.isArray(data) ? data : [];
-        if (workspaces.length === 0) {
-          return { content: [{ type: "text" as const, text: "Nenhum workspace encontrado nesta página." }] };
+        let filtered = all;
+        if (params.active_only) filtered = filtered.filter((w) => w.active === 1);
+        if (params.search) filtered = filtered.filter((w) => matchSearch(w.name, params.search!));
+
+        if (filtered.length === 0) {
+          const hint = params.search
+            ? `Nenhum workspace encontrado para "${params.search}". Total na conta: ${all.length}.`
+            : "Nenhum workspace encontrado.";
+          return { content: [{ type: "text" as const, text: hint }] };
         }
 
+        const { slice, total, page, totalPages, hasMore, nextPage } = paginate(filtered, params.page);
+
         const output = {
-          count: workspaces.length,
-          page: params.page,
-          items: workspaces.map((w) => ({
+          total_in_account: all.length,
+          filtered_total: total,
+          page,
+          total_pages: totalPages,
+          search: params.search ?? null,
+          active_only: params.active_only,
+          items: slice.map((w) => ({
             id: w.id,
             name: w.name,
             active: w.active === 1,
           })),
-          has_more: workspaces.length >= 100,
-          next_page: workspaces.length >= 100 ? params.page + 1 : null,
+          has_more: hasMore,
+          next_page: nextPage,
         };
 
         const markdown = [
           "# Workspaces do Ekyte",
           "",
-          `Página ${params.page} — ${workspaces.length} resultado(s)`,
+          params.search ? `Filtro: "${params.search}"` : `Total na conta: ${all.length}`,
+          `Página ${page}/${totalPages} — ${slice.length} de ${total} resultado(s)`,
           "",
           "| ID | Nome | Ativo |",
           "|----|------|-------|",
-          ...workspaces.map((w) =>
-            `| ${w.id} | ${w.name} | ${w.active === 1 ? "Sim" : "Não"} |`
-          ),
+          ...slice.map((w) => `| ${w.id} | ${w.name} | ${w.active === 1 ? "Sim" : "Não"} |`),
           "",
-          output.has_more ? `➡️ Mais resultados na página ${output.next_page}` : "✅ Fim dos resultados.",
+          hasMore ? `➡️ Mais resultados na página ${nextPage}` : "✅ Fim dos resultados.",
         ].join("\n");
 
         return {
@@ -128,39 +161,51 @@ IMPORTANTE: O ID do usuário é um UUID (ex: "feff4a61-b0a3-483d-a384-172c4b301e
     },
     async (params: ListUsersInput) => {
       try {
-        const data = await apiGet<EkyteUser[]>(companyUrl("users"), {
-          page: params.page,
-        });
+        const data = await apiGet<EkyteUser[]>(companyUrl("users"));
+        const all = Array.isArray(data) ? data : [];
 
-        const users = Array.isArray(data) ? data : [];
-        if (users.length === 0) {
-          return { content: [{ type: "text" as const, text: "Nenhum usuário encontrado nesta página." }] };
+        let filtered = all;
+        if (params.search) {
+          filtered = filtered.filter((u) =>
+            matchSearch(u.userName, params.search!) || matchSearch(u.email, params.search!)
+          );
         }
 
+        if (filtered.length === 0) {
+          const hint = params.search
+            ? `Nenhum usuário encontrado para "${params.search}". Total: ${all.length}.`
+            : "Nenhum usuário encontrado.";
+          return { content: [{ type: "text" as const, text: hint }] };
+        }
+
+        const { slice, total, page, totalPages, hasMore, nextPage } = paginate(filtered, params.page);
+
         const output = {
-          count: users.length,
-          page: params.page,
-          items: users.map((u) => ({
+          total_in_account: all.length,
+          filtered_total: total,
+          page,
+          total_pages: totalPages,
+          search: params.search ?? null,
+          items: slice.map((u) => ({
             id: u.id,
             name: u.userName,
             email: u.email,
           })),
-          has_more: users.length >= 100,
-          next_page: users.length >= 100 ? params.page + 1 : null,
+          has_more: hasMore,
+          next_page: nextPage,
         };
 
         const markdown = [
           "# Usuários do Ekyte",
           "",
-          `Página ${params.page} — ${users.length} resultado(s)`,
+          params.search ? `Filtro: "${params.search}"` : `Total na conta: ${all.length}`,
+          `Página ${page}/${totalPages} — ${slice.length} de ${total} resultado(s)`,
           "",
           "| ID (UUID) | Nome | Email |",
           "|-----------|------|-------|",
-          ...users.map((u) =>
-            `| ${u.id} | ${u.userName} | ${u.email} |`
-          ),
+          ...slice.map((u) => `| ${u.id} | ${u.userName} | ${u.email} |`),
           "",
-          output.has_more ? `➡️ Mais resultados na página ${output.next_page}` : "✅ Fim dos resultados.",
+          hasMore ? `➡️ Mais resultados na página ${nextPage}` : "✅ Fim dos resultados.",
         ].join("\n");
 
         return {
@@ -193,42 +238,53 @@ DICA: Depois de achar o task_type, use ekyte_list_phases com o workflow_id corre
     },
     async (params: ListTaskTypesInput) => {
       try {
-        const data = await apiGet<EkyteTaskType[]>(companyUrl("task-types"), {
-          page: params.page,
-        });
+        const data = await apiGet<EkyteTaskType[]>(companyUrl("task-types"));
+        const all = Array.isArray(data) ? data : [];
 
-        const types = Array.isArray(data) ? data : [];
-        if (types.length === 0) {
-          return { content: [{ type: "text" as const, text: "Nenhum tipo de tarefa encontrado nesta página." }] };
+        let filtered = all;
+        if (params.active_only) filtered = filtered.filter((t) => t.active === 1);
+        if (params.search) filtered = filtered.filter((t) => matchSearch(t.name, params.search!));
+
+        if (filtered.length === 0) {
+          const hint = params.search
+            ? `Nenhum tipo de tarefa encontrado para "${params.search}". Total: ${all.length}.`
+            : "Nenhum tipo de tarefa encontrado.";
+          return { content: [{ type: "text" as const, text: hint }] };
         }
 
+        const { slice, total, page, totalPages, hasMore, nextPage } = paginate(filtered, params.page);
+
         const output = {
-          count: types.length,
-          page: params.page,
-          items: types.map((t) => ({
+          total_in_account: all.length,
+          filtered_total: total,
+          page,
+          total_pages: totalPages,
+          search: params.search ?? null,
+          active_only: params.active_only,
+          items: slice.map((t) => ({
             id: t.id,
             name: t.name,
             active: t.active === 1,
             workflow_id: t.workflowId,
             group: t.ctcTaskTypeGroup?.name,
-            allocation_type: t.allocationType,
           })),
-          has_more: types.length >= 100,
-          next_page: types.length >= 100 ? params.page + 1 : null,
+          has_more: hasMore,
+          next_page: nextPage,
         };
 
         const markdown = [
           "# Tipos de Tarefa do Ekyte",
           "",
-          `Página ${params.page} — ${types.length} resultado(s)`,
+          params.search ? `Filtro: "${params.search}"` : `Total na conta: ${all.length}`,
+          `Página ${page}/${totalPages} — ${slice.length} de ${total} resultado(s)`,
           "",
           "| ID | Nome | Ativo | Workflow ID | Grupo |",
           "|----|------|-------|-------------|-------|",
-          ...types.map((t) =>
+          ...slice.map((t) =>
             `| ${t.id} | ${t.name} | ${t.active === 1 ? "Sim" : "Não"} | ${t.workflowId} | ${t.ctcTaskTypeGroup?.name ?? "-"} |`
           ),
           "",
-          output.has_more ? `➡️ Mais resultados na página ${output.next_page}` : "✅ Fim dos resultados.",
+          hasMore ? `➡️ Mais resultados na página ${nextPage}` : "✅ Fim dos resultados.",
         ].join("\n");
 
         return {
