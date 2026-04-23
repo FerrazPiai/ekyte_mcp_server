@@ -28,3 +28,6 @@ npm-debug.log*
 
 # Playwright MCP browser session artifacts
 .playwright-mcp/
+
+# MCP config (contém paths locais)
+.mcp.json
