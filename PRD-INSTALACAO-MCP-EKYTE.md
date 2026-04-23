@@ -23,11 +23,48 @@ Sao **16 tools** — 8 de leitura, 8 de escrita.
 
 ---
 
-## Tarefas (executar na ordem)
+## PRIMEIRA PERGUNTA: Qual modo de instalacao?
 
-### 1. Obter Credenciais do Ekyte (FAZER PRIMEIRO — apenas para instalacao local)
+> 🔴 **ANTES DE EXECUTAR QUALQUER PASSO, pergunte ao usuario:**
+>
+> **"Voce quer instalar o MCP do Ekyte de qual forma?"**
+>
+> | Opcao | Quando usar | O que precisa |
+> |-------|-------------|---------------|
+> | **A) Local** | Voce tem o repositorio clonado e quer rodar o servidor na sua maquina | Node.js >= 18, Bearer Token, Company ID |
+> | **B) Remoto** | Ja existe um servidor MCP hospedado (EasyPanel, cloud, etc.) | Apenas a URL do servidor |
+>
+> - Se o usuario escolher **A (Local)**: execute os Passos 1 → 2 → 3 → 4 → 5
+> - Se o usuario escolher **B (Remoto)**: execute os Passos 1 → 2 → 3
 
-> 🔴 **Sem essas credenciais o servidor nao inicia.** Se for usar o modo local, pegue os dois valores antes de continuar. Se ja tem um servidor remoto, pule para o Passo 3B.
+---
+
+## Caminho A: Instalacao Local
+
+### 0. Verificar Repositorio
+
+> 🔴 **ANTES DE TUDO, verifique se o usuario ja esta dentro do repositorio do MCP server.**
+>
+> Ha grande chance de a pessoa ja estar no repo `ekyte_mcp_server` — afinal, este PRD esta dentro dele.
+>
+> **Checklist automatica (execute silenciosamente):**
+> 1. Verifique se existe `package.json` no diretorio atual com o nome do projeto MCP
+> 2. Verifique se existe `.env` com `EKYTE_BEARER_TOKEN` e `EKYTE_COMPANY_ID` preenchidos
+> 3. Verifique se `dist/index.js` ja existe (build ja feito)
+>
+> **Resultados:**
+> - Se `.env` ja tem as credenciais preenchidas → **pule o Passo 1** e avise o usuario
+> - Se `dist/index.js` ja existe → **pule o Passo 2** e avise o usuario
+> - Se tudo ja esta pronto → va direto para o **Passo 3** (registrar no Claude Code)
+>
+> Informe ao usuario o que foi detectado e quais passos serao pulados.
+
+---
+
+### 1. Obter Credenciais do Ekyte
+
+> 🔴 **Sem essas credenciais o servidor nao inicia.** Pegue os dois valores antes de continuar.
+> **Pule este passo se o Passo 0 detectou `.env` com credenciais preenchidas.**
 
 **Bearer Token (JWT):**
 
@@ -48,7 +85,9 @@ Sao **16 tools** — 8 de leitura, 8 de escrita.
 
 ---
 
-### 2. Instalar e Buildar (apenas para instalacao local)
+### 2. Instalar e Buildar
+
+> **Pule este passo se o Passo 0 detectou `dist/index.js` existente.**
 
 ```bash
 npm install
@@ -66,29 +105,16 @@ ls dist/index.js
 
 ### 3. Registrar o MCP no Claude Code
 
-Escolha **uma** das opcoes:
-
-#### 3A. Stdio Local (roda na sua maquina)
-
 ```bash
 claude mcp add ekyte -s user -e EKYTE_BEARER_TOKEN=SEU_JWT_AQUI -e EKYTE_COMPANY_ID=SEU_COMPANY_ID -e TRANSPORT=stdio -- node /CAMINHO/COMPLETO/PARA/ekyte_mcp_server/dist/index.js
 ```
 
 > **Dica:** Use `pwd` dentro da pasta do projeto para descobrir o caminho absoluto. O flag `-s user` registra o MCP globalmente — disponivel em qualquer projeto.
-
-#### 3B. HTTP Remoto (servidor ja hospedado)
-
-Se o MCP Server ja esta rodando em um servidor (EasyPanel, cloud, etc.):
-
-```bash
-claude mcp add --transport http ekyte https://SEU-SERVIDOR.com/mcp --scope user
-```
-
-> **Vantagem:** Nao precisa de Node.js local, nao precisa buildar, nao precisa de credenciais na sua maquina. O servidor remoto ja tem tudo configurado.
+> **Se o `.env` ja tem as credenciais**, use os valores de la automaticamente — nao peca ao usuario para colar de novo.
 
 ---
 
-Validar (ambas as opcoes):
+### 4. Validar Registro
 
 ```bash
 claude mcp list
@@ -97,7 +123,7 @@ claude mcp list
 
 ---
 
-### 4. Smoke Test — Validar Que Tudo Funciona
+### 5. Smoke Test
 
 Abra o Claude Code e teste:
 
@@ -119,19 +145,63 @@ Esperado: o Claude segue o fluxo (buscar IDs → confirmar dados → criar taref
 Se retornar erro 401 → token expirado, volte ao Passo 1.
 Se retornar erro 500 → problema temporario no Ekyte, tente em alguns minutos.
 
----
+### Checklist Local
 
-## Checklist
-
-**Local (3A):**
-- [ ] Bearer Token (JWT) obtido do DevTools
-- [ ] Company ID identificado
+- [ ] Repositorio verificado (Passo 0)
+- [ ] Bearer Token (JWT) obtido do DevTools ou `.env`
+- [ ] Company ID identificado ou lido do `.env`
 - [ ] Build realizado (`dist/index.js` existe)
 - [ ] `claude mcp add` (stdio) executado com sucesso
 - [ ] `claude mcp list` mostra `ekyte`
 - [ ] Smoke test passou — `list_workspaces` retorna dados reais
 
-**Remoto (3B):**
+---
+
+## Caminho B: Instalacao Remota
+
+### 1. Registrar o MCP no Claude Code
+
+```bash
+claude mcp add --transport http ekyte https://SEU-SERVIDOR.com/mcp --scope user
+```
+
+> **Vantagem:** Nao precisa de Node.js local, nao precisa buildar, nao precisa de credenciais na sua maquina. O servidor remoto ja tem tudo configurado.
+
+---
+
+### 2. Validar Registro
+
+```bash
+claude mcp list
+# Deve mostrar: ekyte
+```
+
+---
+
+### 3. Smoke Test
+
+Abra o Claude Code e teste:
+
+```
+"Liste os workspaces do Ekyte"
+```
+Esperado: tabela com workspaces (ID, nome, status).
+
+```
+"Quem sao os usuarios da empresa?"
+```
+Esperado: tabela com usuarios (UUID, nome, email).
+
+```
+"Crie uma tarefa de teste no workspace X para o usuario Y"
+```
+Esperado: o Claude segue o fluxo (buscar IDs → confirmar dados → criar tarefa).
+
+Se retornar erro 401 → token expirado, avise o admin do servidor.
+Se retornar erro 500 → problema temporario no Ekyte, tente em alguns minutos.
+
+### Checklist Remoto
+
 - [ ] URL do servidor MCP obtida
 - [ ] `claude mcp add` (http) executado com sucesso
 - [ ] `claude mcp list` mostra `ekyte`
