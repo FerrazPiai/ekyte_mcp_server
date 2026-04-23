@@ -31,3 +31,6 @@ npm-debug.log*
 
 # MCP config (contém paths locais)
 .mcp.json
+
+# Screenshots gerados pelo Windows (nome em formato UUID)
+{*}.png
